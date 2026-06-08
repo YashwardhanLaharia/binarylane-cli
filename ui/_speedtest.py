@@ -13,9 +13,15 @@ from ui._components import clear_screen, console, prompt_choice, format_kbps
 
 
 def _ping_latency(host: str, count: int = 4) -> dict:
+    system = platform.system()
+    if system == "Windows":
+        flag = "-n"
+    else:
+        flag = "-c"
+
     try:
         result = subprocess.run(
-            ["ping", "-c", str(count), host],
+            ["ping", flag, str(count), host],
             capture_output=True,
             text=True,
             timeout=30,
@@ -31,7 +37,8 @@ def _ping_latency(host: str, count: int = 4) -> dict:
     packet_loss = int(loss_match.group(1)) if loss_match else 100
 
     rtt_match = re.search(
-        r"rtt min/avg/max/mdev\s*=\s*([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)\s*ms",
+        r"(?:rtt|round-trip)\s+min/avg/max/(?:mdev|stddev)\s*=\s*"
+        r"([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)\s*ms",
         stdout,
     )
     if rtt_match:
