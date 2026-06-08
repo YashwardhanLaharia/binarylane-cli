@@ -444,12 +444,12 @@ def show_performance_menu(client: BinaryLaneClient, server_id: int):
                     expires = du.get("expires", "N/A")
 
                     bar = Progress(
-                        TextColumn(""),
+                        TextColumn("{task.description:16}"),
                         BarColumn(),
-                        TextColumn("{task.percentage:.1f}%"),
+                        TextColumn("{task.percentage:.1f}%  ({task.completed:.1f}/{task.total:.1f} GB)"),
                         console=console,
                     )
-                    bar.add_task("", total=total_gb, completed=used_gb)
+                    bar.add_task("Data Transfer", total=total_gb, completed=used_gb)
 
                     items = [
                         ("Included Transfer:", f"{total_gb} GB"),
@@ -491,21 +491,23 @@ def show_performance_menu(client: BinaryLaneClient, server_id: int):
                     cpu = avg.get("cpu_usage_percent", 0)
                     cpu_detailed = avg.get("cpu_usage_detailed", [])
                     mem_bytes = avg.get("memory_usage_bytes", 0)
+                    storage_used_mb = avg.get("storage_usage_megabytes", 0)
                     net_in = avg.get("network_incoming_kbps", 0)
                     net_out = avg.get("network_outgoing_kbps", 0)
-                    storage_used_mb = avg.get("storage_usage_megabytes", 0)
                     storage_read_kbps = avg.get("storage_read_kbps", 0)
                     storage_write_kbps = avg.get("storage_write_kbps", 0)
                     read_iops = avg.get("storage_read_requests_per_second", 0)
                     write_iops = avg.get("storage_write_requests_per_second", 0)
 
-                    cpu_bar = Progress(
-                        TextColumn(""),
+                    perf_bar = Progress(
+                        TextColumn("{task.description:12}"),
                         BarColumn(),
-                        TextColumn(f"{{task.percentage:.1f}}%"),
+                        TextColumn("{task.percentage:.1f}%  ({task.completed:.1f}/{task.total:.0f})"),
                         console=console,
                     )
-                    cpu_bar.add_task("CPU", total=100, completed=cpu)
+                    perf_bar.add_task("CPU", total=100, completed=cpu)
+                    perf_bar.add_task("Memory", total=max_mem_mb, completed=mem_bytes / (1024*1024))
+                    perf_bar.add_task("Storage", total=max_storage_gb * 1024, completed=storage_used_mb)
 
                     items = [
                         ("Period:", f"{period.get('start', '?')} to {period.get('end', '?')}"),
@@ -513,12 +515,9 @@ def show_performance_menu(client: BinaryLaneClient, server_id: int):
                     ]
                     info_table = make_info_table(items)
                     perf_items = [
-                        ("Memory:", f"{format_bytes_to_mb(mem_bytes)} avg | {max_mem_mb:.2f} MB peak"),
                         ("Network:", f"{format_kbps(net_in)} in | {format_kbps(net_out)} out"),
-                        ("Storage:", f"{storage_used_mb:.2f} MB used"),
                         ("Read:", f"{format_kbps(storage_read_kbps)} | {read_iops:.1f} IOPS"),
                         ("Write:", f"{format_kbps(storage_write_kbps)} | {write_iops:.1f} IOPS"),
-                        ("Peak Storage:", f"{max_storage_gb:.2f} GB"),
                     ]
                     if cpu_detailed:
                         cores = " | ".join(
@@ -529,7 +528,7 @@ def show_performance_menu(client: BinaryLaneClient, server_id: int):
 
                     content = Table.grid(padding=(0, 0))
                     content.add_row(info_table)
-                    content.add_row(Panel(cpu_bar, border_style="green"))
+                    content.add_row(Panel(perf_bar, border_style="green"))
                     content.add_row(perf_table)
                     console.print(Panel(content, title="[bold]Current Performance[/]", border_style="blue", padding=(1, 2)))
             except BinaryLaneAPIError as e:
