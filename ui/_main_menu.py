@@ -7,6 +7,7 @@ from rich import box
 from client import BinaryLaneClient, BinaryLaneAPIError, BinaryLaneValidationError
 from ui._components import clear_screen, console, make_info_table, prompt_choice
 from ui._server_list import show_servers_menu
+from ui._speedtest import run_speedtest
 
 
 def show_main_menu():
@@ -18,6 +19,7 @@ def show_main_menu():
     table.add_row("2.", "Servers")
     table.add_row("3.", "List Recent Actions")
     table.add_row("4.", "Perform Server Action")
+    table.add_row("5.", "Speedtest (Local to VPS)")
     table.add_row("Q.", "Quit")
     panel = Panel(
         table,
@@ -158,6 +160,9 @@ def run_main_choice(client: BinaryLaneClient, choice: str):
         except BinaryLaneAPIError as e:
             console.print(f"[red]Error:[/] {e}")
         prompt_choice()
+
+    elif choice == "5":
+        run_speedtest(client)
 
     elif choice.lower() == "q":
         clear_screen()
