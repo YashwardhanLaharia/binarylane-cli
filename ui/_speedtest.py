@@ -157,8 +157,10 @@ def run_speedtest(client: BinaryLaneClient):
 
             err = ping_result.get("error")
             if err:
-                loss = ping_result.get("loss", 100)
-                loss_str = f"[red]{loss}%[/]" if loss > 0 else "[green]0%[/]"
+                if "loss" in ping_result:
+                    loss_str = f"[red]{ping_result['loss']}%[/]"
+                else:
+                    loss_str = "[dim]N/A[/]"
                 table.add_row(name, ip, f"[red]{err}[/]", loss_str, vps_in, vps_out, "[red]N/A[/]")
             else:
                 loss_str = f"[red]{ping_result['loss']}%[/]" if ping_result["loss"] > 0 else "[green]0%[/]"
