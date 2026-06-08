@@ -28,6 +28,18 @@ class BinaryLaneValidationError(BinaryLaneAPIError):
     pass
 
 
+class BinaryLaneConnectionError(BinaryLaneAPIError):
+    """Raised on network-level failures (timeout, DNS, connection refused, etc.)."""
+
+    pass
+
+
+class BinaryLaneHTTPError(BinaryLaneAPIError):
+    """Raised on unexpected HTTP errors (5xx, 403, etc.)."""
+
+    pass
+
+
 class BinaryLaneClient:
     def __init__(self, api_token: str, base_url: str = "https://api.binarylane.com.au"):
         self.base_url = base_url.rstrip("/")
@@ -44,7 +56,20 @@ class BinaryLaneClient:
             path = "/" + path
         url = f"{self.base_url}{path}"
 
-        response = self.session.request(method, url, **kwargs)
+        try:
+            response = self.session.request(method, url, timeout=30, **kwargs)
+        except requests.exceptions.ConnectionError as e:
+            raise BinaryLaneConnectionError(
+                f"Could not connect to BinaryLane API: {e}",
+            ) from e
+        except requests.exceptions.Timeout as e:
+            raise BinaryLaneConnectionError(
+                "Request to BinaryLane API timed out.",
+            ) from e
+        except requests.exceptions.RequestException as e:
+            raise BinaryLaneConnectionError(
+                f"Request to BinaryLane API failed: {e}",
+            ) from e
 
         if response.status_code == 401:
             raise BinaryLaneAuthError(
@@ -65,11 +90,24 @@ class BinaryLaneClient:
                 response_data=response.text,
             )
 
-        response.raise_for_status()
+        if not response.ok:
+            raise BinaryLaneHTTPError(
+                f"API returned HTTP {response.status_code}: {response.reason}",
+                status_code=response.status_code,
+                response_data=response.text,
+            )
 
         if response.status_code == 204:
             return {}
-        return response.json()
+
+        try:
+            return response.json()
+        except (ValueError, TypeError) as e:
+            raise BinaryLaneAPIError(
+                f"Failed to parse API response: {e}",
+                status_code=response.status_code,
+                response_data=response.text,
+            ) from e
 
     # Account
     def get_account(self) -> dict:
