@@ -33,8 +33,8 @@ def _ping_latency(host: str, count: int = 4) -> dict:
 
     stdout = result.stdout
 
-    loss_match = re.search(r"(\d+)% packet loss", stdout)
-    packet_loss = int(loss_match.group(1)) if loss_match else 100
+    loss_match = re.search(r"([\d.]+)% packet loss", stdout)
+    packet_loss = int(float(loss_match.group(1))) if loss_match else 100
 
     rtt_match = re.search(
         r"(?:rtt|round-trip)\s+min/avg/max/(?:mdev|stddev)\s*=\s*"
@@ -47,6 +47,20 @@ def _ping_latency(host: str, count: int = 4) -> dict:
             "avg": float(rtt_match.group(2)),
             "max": float(rtt_match.group(3)),
             "mdev": float(rtt_match.group(4)),
+            "loss": packet_loss,
+        }
+
+    win_match = re.search(
+        r"Minimum\s*=\s*([\d]+)ms,\s*Maximum\s*=\s*([\d]+)ms,\s*Average\s*=\s*([\d]+)ms",
+        stdout,
+    )
+    if win_match:
+        vals = [float(win_match.group(i)) for i in (1, 2, 3)]
+        return {
+            "min": vals[0],
+            "avg": vals[2],
+            "max": vals[1],
+            "mdev": 0,
             "loss": packet_loss,
         }
 
