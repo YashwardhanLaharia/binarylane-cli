@@ -108,6 +108,15 @@ class BinaryLaneClient:
         data = self.list_servers()
         return data.get("servers", [])
 
+    # Data Usage
+    def get_data_usage(self, server_id: int) -> dict:
+        return self._request("GET", f"/v2/data_usages/{server_id}/current")
+
+    # Performance / Sample Sets
+    def get_latest_sample_set(self, server_id: int, data_interval: str = "five-minute") -> dict:
+        params = {"data_interval": data_interval}
+        return self._request("GET", f"/v2/samplesets/{server_id}/latest", params=params)
+
 
 # --- UI Helpers ---
 
@@ -217,7 +226,8 @@ def show_server_details_menu(client: BinaryLaneClient, server_id: int):
         print("4. Region & Operating System")
         print("5. Backups & Maintenance")
         print("6. Full JSON")
-        print("7. Back to Main Menu")
+        print("7. Performance & Usage")
+        print("8. Back to Main Menu")
         print("=" * 50)
 
         choice = input("Select an option: ").strip()
@@ -322,6 +332,121 @@ def show_server_details_menu(client: BinaryLaneClient, server_id: int):
             input("\nPress Enter to continue...")
 
         elif choice == "7":
+            show_performance_menu(client, server_id)
+
+        elif choice == "8":
+            break
+
+        else:
+            print("Invalid option. Press Enter to continue...")
+            input()
+
+
+def format_kbps(kbps: float) -> str:
+    """Convert Kbps to human-readable string."""
+    if kbps >= 1000:
+        return f"{kbps/1000:.2f} Mbps"
+    return f"{kbps:.2f} Kbps"
+
+
+def format_bytes_to_mb(bytes_val: float) -> str:
+    """Convert bytes to MB."""
+    return f"{bytes_val / (1024*1024):.2f} MB"
+
+
+def format_bytes_to_gb(bytes_val: float) -> str:
+    """Convert bytes to GB."""
+    return f"{bytes_val / (1024*1024*1024):.2f} GB"
+
+
+def show_performance_menu(client: BinaryLaneClient, server_id: int):
+    while True:
+        clear_screen()
+        print("=" * 50)
+        print("Performance & Usage")
+        print("=" * 50)
+        print("1. Data Transfer (bandwidth this period)")
+        print("2. Current Performance (CPU, RAM, I/O)")
+        print("3. Back to Server Menu")
+        print("=" * 50)
+
+        choice = input("Select an option: ").strip()
+
+        if choice == "1":
+            clear_screen()
+            print("=" * 50)
+            print("Data Transfer")
+            print("=" * 50)
+            try:
+                data = client.get_data_usage(server_id)
+                du = data.get("data_usage", {})
+                if not du:
+                    print("No data usage information available.")
+                else:
+                    total_gb = du.get("transfer_gigabytes", 0)
+                    used_gb = du.get("current_transfer_usage_gigabytes", 0)
+                    percent = (used_gb / total_gb * 100) if total_gb > 0 else 0
+                    period_end = du.get("transfer_period_end", "N/A")
+                    expires = du.get("expires", "N/A")
+                    print(f"Included Transfer: {total_gb} GB")
+                    print(f"Used: {used_gb:.3f} GB ({percent:.1f}%)")
+                    if used_gb > total_gb:
+                        excess = used_gb - total_gb
+                        print(f"EXCESS: {excess:.3f} GB used (overage charges apply)")
+                    else:
+                        remaining = total_gb - used_gb
+                        print(f"Remaining: {remaining:.3f} GB")
+                    print(f"Period Ends: {period_end}")
+                    print(f"Expires: {expires}")
+            except BinaryLaneAPIError as e:
+                print(f"Error: {e}")
+            input("\nPress Enter to continue...")
+
+        elif choice == "2":
+            clear_screen()
+            print("=" * 50)
+            print("Current Performance")
+            print("=" * 50)
+            try:
+                data = client.get_latest_sample_set(server_id, data_interval="five-minute")
+                ss = data.get("sample_set")
+                if not ss:
+                    print("No performance sample data available.")
+                else:
+                    avg = ss.get("average", {})
+                    period = ss.get("period", {})
+                    max_mem_mb = ss.get("maximum_memory_megabytes", 0)
+                    max_storage_gb = ss.get("maximum_storage_gigabytes", 0)
+
+                    cpu = avg.get("cpu_usage_percent", 0)
+                    cpu_detailed = avg.get("cpu_usage_detailed", [])
+                    mem_bytes = avg.get("memory_usage_bytes", 0)
+                    net_in = avg.get("network_incoming_kbps", 0)
+                    net_out = avg.get("network_outgoing_kbps", 0)
+                    storage_used_mb = avg.get("storage_usage_megabytes", 0)
+                    storage_read_kbps = avg.get("storage_read_kbps", 0)
+                    storage_write_kbps = avg.get("storage_write_kbps", 0)
+                    read_iops = avg.get("storage_read_requests_per_second", 0)
+                    write_iops = avg.get("storage_write_requests_per_second", 0)
+
+                    print(f"Period: {period.get('start', '?')} to {period.get('end', '?')}")
+                    print(f"Data Interval: {period.get('data_interval', '?')}")
+                    print()
+                    print(f"CPU Usage: {cpu:.1f}%")
+                    if cpu_detailed:
+                        cores = ", ".join([f"v{i+1}: {c:.1f}%" for i, c in enumerate(cpu_detailed)])
+                        print(f"  Per-core: {cores}")
+                    print(f"Memory: {format_bytes_to_mb(mem_bytes)} avg | {max_mem_mb:.2f} MB peak")
+                    print(f"Network: {format_kbps(net_in)} in | {format_kbps(net_out)} out")
+                    print(f"Storage: {storage_used_mb:.2f} MB used")
+                    print(f"  Read:  {format_kbps(storage_read_kbps)} | {read_iops:.1f} IOPS")
+                    print(f"  Write: {format_kbps(storage_write_kbps)} | {write_iops:.1f} IOPS")
+                    print(f"Peak Storage: {max_storage_gb:.2f} GB")
+            except BinaryLaneAPIError as e:
+                print(f"Error: {e}")
+            input("\nPress Enter to continue...")
+
+        elif choice == "3":
             break
 
         else:
