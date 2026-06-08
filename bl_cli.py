@@ -7,7 +7,10 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.progress import Progress, BarColumn, TextColumn
 from rich import box
+
+console = Console()
 
 # --- Custom Exceptions ---
 
@@ -136,7 +139,20 @@ def prompt_choice():
 
 
 def print_json(data: dict):
-    print(json.dumps(data, indent=2))
+    console.print_json(data=data)
+
+
+def make_info_table(items: list[tuple[str, str]]) -> Table:
+    table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+    table.add_column(style="yellow", width=20)
+    table.add_column(style="white")
+    for key, value in items:
+        table.add_row(key, str(value))
+    return table
+
+
+def menu_panel(title: str, border_style: str = "blue") -> Panel:
+    return Panel("", title=f"[bold yellow]{title}[/]", border_style=border_style, padding=(1, 2))
 
 
 # --- Menus ---
@@ -164,21 +180,26 @@ def show_main_menu():
 
 def show_servers_menu(client: BinaryLaneClient):
     clear_screen()
-    print("=" * 50)
-    print("Your Servers")
-    print("=" * 50)
 
     try:
         servers = client.get_server_list()
     except BinaryLaneAPIError as e:
-        print(f"Error: {e}")
+        console.print(f"[red]Error:[/] {e}")
         prompt_choice()
         return
 
     if not servers:
-        print("No servers found.")
+        console.print("[yellow]No servers found.[/]")
         prompt_choice()
         return
+
+    table = Table(box=box.SIMPLE, padding=(0, 1))
+    table.add_column("#", style="cyan", justify="right")
+    table.add_column("Name", style="white", no_wrap=True)
+    table.add_column("ID", style="dim", justify="right")
+    table.add_column("Status")
+    table.add_column("Region")
+    table.add_column("OS")
 
     for i, server in enumerate(servers, 1):
         region = server.get("region", {})
@@ -186,17 +207,32 @@ def show_servers_menu(client: BinaryLaneClient):
         name = server.get("name", "Unknown")
         sid = server.get("id", "?")
         status = server.get("status", "unknown")
+        status_style = {
+            "active": "green",
+            "off": "red",
+            "new": "cyan",
+        }.get(status, "white")
         region_name = region.get("slug", "?")
         os_name = image.get("distribution", "?")
         os_version = image.get("name", "")
         os_full = f"{os_name} {os_version}".strip()
-        print(
-            f"{i}) {name:30s} (ID: {sid:<8d}) [{status:8s}] {region_name:<8s} {os_full}"
+        table.add_row(
+            str(i),
+            name,
+            str(sid),
+            f"[{status_style}]{status}[/]",
+            region_name,
+            os_full,
         )
 
-    print("=" * 50)
-    print("0) Back to Main Menu")
-    print("=" * 50)
+    panel = Panel(
+        table,
+        title="[bold yellow]Your Servers[/]",
+        border_style="blue",
+        padding=(1, 2),
+    )
+    console.print(panel)
+    console.print("[dim]0[/] Back to Main Menu")
 
     choice = input("Select a server by index: ").strip()
 
@@ -209,10 +245,10 @@ def show_servers_menu(client: BinaryLaneClient):
             server_id = servers[idx - 1]["id"]
             show_server_details_menu(client, server_id)
         else:
-            print("Error: Invalid index.")
+            console.print("[red]Error:[/] Invalid index.")
             prompt_choice()
     except ValueError:
-        print("Error: Please enter a number.")
+        console.print("[red]Error:[/] Please enter a number.")
         prompt_choice()
 
 
@@ -220,131 +256,129 @@ def show_server_details_menu(client: BinaryLaneClient, server_id: int):
     try:
         data = client.get_server(server_id)
     except BinaryLaneAPIError as e:
-        print(f"Error fetching server details: {e}")
+        console.print(f"[red]Error fetching server details:[/] {e}")
         prompt_choice()
         return
 
     server = data.get("server", {})
     if not server:
-        print("No server data returned.")
+        console.print("[red]No server data returned.[/]")
         prompt_choice()
         return
 
     while True:
         clear_screen()
-        print("=" * 50)
-        print(f"Server: {server.get('name', 'Unknown')}")
-        print("=" * 50)
-        print("1. Basic Info")
-        print("2. Specifications")
-        print("3. Networking")
-        print("4. Region & Operating System")
-        print("5. Backups & Maintenance")
-        print("6. Full JSON")
-        print("7. Performance & Usage")
-        print("8. Back to Main Menu")
-        print("=" * 50)
+        server_name = server.get("name", "Unknown")
+        table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+        table.add_column(style="cyan", justify="right", width=2)
+        table.add_column("")
+        table.add_row("1.", "Basic Info")
+        table.add_row("2.", "Specifications")
+        table.add_row("3.", "Networking")
+        table.add_row("4.", "Region & Operating System")
+        table.add_row("5.", "Backups & Maintenance")
+        table.add_row("6.", "Full JSON")
+        table.add_row("7.", "Performance & Usage")
+        table.add_row("8.", "Back to Main Menu")
+        panel = Panel(
+            table,
+            title=f"[bold yellow]Server: {server_name}[/]",
+            border_style="blue",
+            padding=(1, 2),
+        )
+        console.print(panel)
 
         choice = input("Select an option: ").strip()
 
         if choice == "1":
             clear_screen()
-            print("=" * 50)
-            print("Basic Info")
-            print("=" * 50)
-            print(f"ID: {server.get('id')}")
-            print(f"Hostname: {server.get('name')}")
-            print(f"Status: {server.get('status')}")
-            print(f"Created At: {server.get('created_at')}")
-            print(f"Permalink: {server.get('permalink')}")
-            print(
-                f"Password Change Supported: {server.get('password_change_supported')}"
-            )
+            t = make_info_table([
+                ("ID:", str(server.get("id", ""))),
+                ("Hostname:", server.get("name", "")),
+                ("Status:", server.get("status", "")),
+                ("Created At:", server.get("created_at", "")),
+                ("Permalink:", server.get("permalink", "")),
+                ("Password Change Supported:", str(server.get("password_change_supported", ""))),
+            ])
+            console.print(Panel(t, title="[bold]Basic Info[/]", border_style="blue", padding=(1, 2)))
             input("\nPress Enter to continue...")
 
         elif choice == "2":
             clear_screen()
-            print("=" * 50)
-            print("Specifications")
-            print("=" * 50)
             size = server.get("size", {})
             opts = server.get("selected_size_options", {})
-            print(f"Memory: {server.get('memory')} MB")
-            print(f"vCPUs: {server.get('vcpus')}")
-            print(f"Disk: {server.get('disk')} GB")
-            print(f"Size Slug: {server.get('size_slug')}")
+            items = [
+                ("Memory:", f"{server.get('memory')} MB"),
+                ("vCPUs:", str(server.get("vcpus", ""))),
+                ("Disk:", f"{server.get('disk')} GB"),
+                ("Size Slug:", server.get("size_slug", "")),
+            ]
             size_type = size.get("size_type") or {}
-            print(f"Plan Type: {size_type.get('name')}")
-            print(f"Price Monthly: ${size.get('price_monthly')}")
-            print(f"Price Hourly: ${size.get('price_hourly')}")
+            items.append(("Plan Type:", size_type.get("name", "")))
+            items.append(("Price Monthly:", f"${size.get('price_monthly')}"))
+            items.append(("Price Hourly:", f"${size.get('price_hourly')}"))
             if opts:
-                print("\nSelected Options:")
                 for key, value in opts.items():
-                    print(f"  - {key}: {value}")
-            else:
-                print("Selected Options: default")
+                    items.append((f"  {key}:", str(value)))
+            t = make_info_table(items)
+            console.print(Panel(t, title="[bold]Specifications[/]", border_style="blue", padding=(1, 2)))
             input("\nPress Enter to continue...")
 
         elif choice == "3":
             clear_screen()
-            print("=" * 50)
-            print("Networking")
-            print("=" * 50)
             networks = server.get("networks", {})
-            print(f"MAC Address: {networks.get('mac_address')}")
-            print(f"Port Blocking Enabled: {networks.get('port_blocking')}")
-
-            print("\nIPv4 Addresses:")
+            items = [
+                ("MAC Address:", networks.get("mac_address", "")),
+                ("Port Blocking:", str(networks.get("port_blocking", ""))),
+            ]
             for entry in networks.get("v4", []):
                 kind = entry.get("type", "unknown")
-                ip = entry.get("ip_address")
-                reverse = entry.get("reverse_name")
-                print(f"  - {kind}: {ip} (reverse: {reverse})")
-
-            v6_entries = networks.get("v6", [])
-            print("\nIPv6 Addresses:")
-            if v6_entries:
-                for entry in v6_entries:
+                ip = entry.get("ip_address", "")
+                reverse = entry.get("reverse_name", "")
+                items.append((f"IPv4 ({kind}):", f"{ip} ({reverse})"))
+            v6 = networks.get("v6", [])
+            if v6:
+                for entry in v6:
                     kind = entry.get("type", "unknown")
-                    print(f"  - {kind}: {entry.get('ip_address')}")
+                    items.append((f"IPv6 ({kind}):", entry.get("ip_address", "")))
             else:
-                print("  - None configured")
+                items.append(("IPv6:", "None configured"))
+            t = make_info_table(items)
+            console.print(Panel(t, title="[bold]Networking[/]", border_style="blue", padding=(1, 2)))
             input("\nPress Enter to continue...")
 
         elif choice == "4":
             clear_screen()
-            print("=" * 50)
-            print("Region & Operating System")
-            print("=" * 50)
             region = server.get("region", {})
             image = server.get("image", {})
-            print(f"Region: {region.get('name')} ({region.get('slug')})")
-            print(f"Region Available: {region.get('available')}")
-            print(f"OS: {image.get('full_name')} ({image.get('distribution')})")
-            print(f"Image Type: {image.get('type')}")
-            print(f"Image Slug: {image.get('slug')}")
+            t = make_info_table([
+                ("Region:", f"{region.get('name')} ({region.get('slug')})"),
+                ("Region Available:", str(region.get("available", ""))),
+                ("OS:", f"{image.get('full_name')} ({image.get('distribution')})"),
+                ("Image Type:", image.get("type", "")),
+                ("Image Slug:", image.get("slug", "")),
+            ])
+            console.print(Panel(t, title="[bold]Region & OS[/]", border_style="blue", padding=(1, 2)))
             input("\nPress Enter to continue...")
 
         elif choice == "5":
             clear_screen()
-            print("=" * 50)
-            print("Backups & Maintenance")
-            print("=" * 50)
-            print(f"Backup IDs: {server.get('backup_ids')}")
-            print(f"Next Backup Window: {server.get('next_backup_window')}")
             backup_settings = server.get("backup_settings") or {}
-            print("Backup Settings:")
+            items = [
+                ("Backup IDs:", str(server.get("backup_ids", ""))),
+                ("Next Backup Window:", str(server.get("next_backup_window", ""))),
+            ]
             for key, value in backup_settings.items():
-                print(f"  - {key}: {value}")
-            print(f"Under Maintenance: {server.get('is_under_maintenance')}")
-            print(f"Features: {server.get('features')}")
+                items.append((f"  {key}:", str(value)))
+            items.append(("Under Maintenance:", str(server.get("is_under_maintenance", ""))))
+            items.append(("Features:", str(server.get("features", ""))))
+            t = make_info_table(items)
+            console.print(Panel(t, title="[bold]Backups & Maintenance[/]", border_style="blue", padding=(1, 2)))
             input("\nPress Enter to continue...")
 
         elif choice == "6":
             clear_screen()
-            print("=" * 50)
-            print("Full JSON")
-            print("=" * 50)
+            console.print(Panel("", title="[bold]Full JSON[/]", border_style="blue", padding=(1, 2)))
             print_json(data)
             input("\nPress Enter to continue...")
 
@@ -355,7 +389,7 @@ def show_server_details_menu(client: BinaryLaneClient, server_id: int):
             break
 
         else:
-            print("Invalid option. Press Enter to continue...")
+            console.print("[red]Invalid option. Press Enter to continue...[/]")
             input()
 
 
@@ -379,58 +413,75 @@ def format_bytes_to_gb(bytes_val: float) -> str:
 def show_performance_menu(client: BinaryLaneClient, server_id: int):
     while True:
         clear_screen()
-        print("=" * 50)
-        print("Performance & Usage")
-        print("=" * 50)
-        print("1. Data Transfer (bandwidth this period)")
-        print("2. Current Performance (CPU, RAM, I/O)")
-        print("3. Back to Server Menu")
-        print("=" * 50)
+        table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+        table.add_column(style="cyan", justify="right", width=2)
+        table.add_column("")
+        table.add_row("1.", "Data Transfer (bandwidth this period)")
+        table.add_row("2.", "Current Performance (CPU, RAM, I/O)")
+        table.add_row("3.", "Back to Server Menu")
+        panel = Panel(
+            table,
+            title="[bold yellow]Performance & Usage[/]",
+            border_style="blue",
+            padding=(1, 2),
+        )
+        console.print(panel)
 
         choice = input("Select an option: ").strip()
 
         if choice == "1":
             clear_screen()
-            print("=" * 50)
-            print("Data Transfer")
-            print("=" * 50)
             try:
                 data = client.get_data_usage(server_id)
                 du = data.get("data_usage", {})
                 if not du:
-                    print("No data usage information available.")
+                    console.print("[yellow]No data usage information available.[/]")
                 else:
                     total_gb = du.get("transfer_gigabytes", 0)
                     used_gb = du.get("current_transfer_usage_gigabytes", 0)
                     percent = (used_gb / total_gb * 100) if total_gb > 0 else 0
                     period_end = du.get("transfer_period_end", "N/A")
                     expires = du.get("expires", "N/A")
-                    print(f"Included Transfer: {total_gb} GB")
-                    print(f"Used: {used_gb:.3f} GB ({percent:.1f}%)")
+
+                    bar = Progress(
+                        TextColumn(""),
+                        BarColumn(),
+                        TextColumn("{task.percentage:.1f}%"),
+                        console=console,
+                    )
+                    bar.add_task("", total=total_gb, completed=used_gb)
+
+                    items = [
+                        ("Included Transfer:", f"{total_gb} GB"),
+                        ("Used:", f"{used_gb:.3f} GB"),
+                    ]
                     if used_gb > total_gb:
                         excess = used_gb - total_gb
-                        print(f"EXCESS: {excess:.3f} GB used (overage charges apply)")
+                        items.append(("EXCESS:", f"[red]{excess:.3f} GB (overage charges apply)[/]"))
                     else:
                         remaining = total_gb - used_gb
-                        print(f"Remaining: {remaining:.3f} GB")
-                    print(f"Period Ends: {period_end}")
-                    print(f"Expires: {expires}")
+                        items.append(("Remaining:", f"{remaining:.3f} GB"))
+                    items.append(("Period Ends:", period_end))
+                    items.append(("Expires:", expires))
+
+                    info_table = make_info_table(items)
+                    content = Table.grid(padding=(0, 0))
+                    content.add_row(info_table)
+                    content.add_row(Panel(bar, border_style="green"))
+                    console.print(Panel(content, title="[bold]Data Transfer[/]", border_style="blue", padding=(1, 2)))
             except BinaryLaneAPIError as e:
-                print(f"Error: {e}")
+                console.print(f"[red]Error:[/] {e}")
             input("\nPress Enter to continue...")
 
         elif choice == "2":
             clear_screen()
-            print("=" * 50)
-            print("Current Performance")
-            print("=" * 50)
             try:
                 data = client.get_latest_sample_set(
                     server_id, data_interval="five-minute"
                 )
                 ss = data.get("sample_set")
                 if not ss:
-                    print("No performance sample data available.")
+                    console.print("[yellow]No performance sample data available.[/]")
                 else:
                     avg = ss.get("average", {})
                     period = ss.get("period", {})
@@ -448,54 +499,69 @@ def show_performance_menu(client: BinaryLaneClient, server_id: int):
                     read_iops = avg.get("storage_read_requests_per_second", 0)
                     write_iops = avg.get("storage_write_requests_per_second", 0)
 
-                    print(
-                        f"Period: {period.get('start', '?')} to {period.get('end', '?')}"
+                    cpu_bar = Progress(
+                        TextColumn(""),
+                        BarColumn(),
+                        TextColumn(f"{{task.percentage:.1f}}%"),
+                        console=console,
                     )
-                    print(f"Data Interval: {period.get('data_interval', '?')}")
-                    print()
-                    print(f"CPU Usage: {cpu:.1f}%")
+                    cpu_bar.add_task("CPU", total=100, completed=cpu)
+
+                    items = [
+                        ("Period:", f"{period.get('start', '?')} to {period.get('end', '?')}"),
+                        ("Interval:", period.get("data_interval", "?")),
+                    ]
+                    info_table = make_info_table(items)
+                    perf_items = [
+                        ("Memory:", f"{format_bytes_to_mb(mem_bytes)} avg | {max_mem_mb:.2f} MB peak"),
+                        ("Network:", f"{format_kbps(net_in)} in | {format_kbps(net_out)} out"),
+                        ("Storage:", f"{storage_used_mb:.2f} MB used"),
+                        ("Read:", f"{format_kbps(storage_read_kbps)} | {read_iops:.1f} IOPS"),
+                        ("Write:", f"{format_kbps(storage_write_kbps)} | {write_iops:.1f} IOPS"),
+                        ("Peak Storage:", f"{max_storage_gb:.2f} GB"),
+                    ]
                     if cpu_detailed:
-                        cores = ", ".join(
+                        cores = " | ".join(
                             [f"v{i+1}: {c:.1f}%" for i, c in enumerate(cpu_detailed)]
                         )
-                        print(f"  Per-core: {cores}")
-                    print(
-                        f"Memory: {format_bytes_to_mb(mem_bytes)} avg | {max_mem_mb:.2f} MB peak"
-                    )
-                    print(
-                        f"Network: {format_kbps(net_in)} in | {format_kbps(net_out)} out"
-                    )
-                    print(f"Storage: {storage_used_mb:.2f} MB used")
-                    print(
-                        f"  Read:  {format_kbps(storage_read_kbps)} | {read_iops:.1f} IOPS"
-                    )
-                    print(
-                        f"  Write: {format_kbps(storage_write_kbps)} | {write_iops:.1f} IOPS"
-                    )
-                    print(f"Peak Storage: {max_storage_gb:.2f} GB")
+                        perf_items.insert(0, ("Per-core:", cores))
+                    perf_table = make_info_table(perf_items)
+
+                    content = Table.grid(padding=(0, 0))
+                    content.add_row(info_table)
+                    content.add_row(Panel(cpu_bar, border_style="green"))
+                    content.add_row(perf_table)
+                    console.print(Panel(content, title="[bold]Current Performance[/]", border_style="blue", padding=(1, 2)))
             except BinaryLaneAPIError as e:
-                print(f"Error: {e}")
+                console.print(f"[red]Error:[/] {e}")
             input("\nPress Enter to continue...")
 
         elif choice == "3":
             break
 
         else:
-            print("Invalid option. Press Enter to continue...")
+            console.print("[red]Invalid option. Press Enter to continue...[/]")
             input()
 
 
 def run_main_choice(client: BinaryLaneClient, choice: str):
     if choice == "1":
         clear_screen()
-        print("=" * 50)
-        print("Account Info")
-        print("=" * 50)
         try:
             data = client.get_account()
-            print_json(data)
+            account = data.get("account", data)
+            items = [
+                ("Name:", account.get("name", "")),
+                ("Email:", account.get("email", "")),
+                ("UUID:", account.get("uuid", "")),
+                ("Status:", account.get("status", "")),
+                ("Email Verified:", str(account.get("email_verified", ""))),
+                ("Created At:", account.get("created_at", "")),
+            ]
+            t = make_info_table(items)
+            console.print(Panel(t, title="[bold]Account Info[/]", border_style="blue", padding=(1, 2)))
         except BinaryLaneAPIError as e:
-            print(f"Error: {e}")
+            console.print(f"[red]Error:[/] {e}")
         prompt_choice()
 
     elif choice == "2":
@@ -503,38 +569,68 @@ def run_main_choice(client: BinaryLaneClient, choice: str):
 
     elif choice == "3":
         clear_screen()
-        print("=" * 50)
-        print("List Recent Actions")
-        print("=" * 50)
         try:
             data = client.list_actions()
-            print_json(data)
+            actions = data.get("actions", [])
+            if not actions:
+                console.print("[yellow]No recent actions found.[/]")
+            else:
+                table = Table(box=box.SIMPLE, padding=(0, 1))
+                table.add_column("ID", style="cyan", justify="right")
+                table.add_column("Type", style="white")
+                table.add_column("Status")
+                table.add_column("Region")
+                table.add_column("Started")
+                table.add_column("Completed")
+                for action in actions:
+                    sid = action.get("id", "")
+                    atype = action.get("type", "")
+                    status = action.get("status", "")
+                    region = action.get("region_slug", "")
+                    started = action.get("started_at", "")
+                    completed = action.get("completed_at", "") or "[dim]pending[/]"
+                    status_style = {
+                        "completed": "green",
+                        "in-progress": "cyan",
+                        "errored": "red",
+                        "new": "dim",
+                    }.get(status, "white")
+                    table.add_row(
+                        str(sid),
+                        atype,
+                        f"[{status_style}]{status}[/]",
+                        region,
+                        str(started)[:19],
+                        str(completed)[:19],
+                    )
+                console.print(Panel(table, title="[bold]Recent Actions[/]", border_style="blue", padding=(1, 2)))
         except BinaryLaneAPIError as e:
-            print(f"Error: {e}")
+            console.print(f"[red]Error:[/] {e}")
         prompt_choice()
 
     elif choice == "4":
         clear_screen()
-        print("=" * 50)
-        print("Perform Server Action")
-        print("=" * 50)
 
-        # Reuse the server picker
         try:
             servers = client.get_server_list()
         except BinaryLaneAPIError as e:
-            print(f"Error: {e}")
+            console.print(f"[red]Error:[/] {e}")
             prompt_choice()
             return
 
         if not servers:
-            print("No servers found.")
+            console.print("[yellow]No servers found.[/]")
             prompt_choice()
             return
 
+        table = Table(box=box.SIMPLE, padding=(0, 1))
+        table.add_column("#", style="cyan", justify="right")
+        table.add_column("Name")
+        table.add_column("ID", justify="right")
         for i, server in enumerate(servers, 1):
-            print(f"{i}) {server['name']} (ID: {server['id']})")
-        print("0) Cancel")
+            table.add_row(str(i), server["name"], str(server["id"]))
+        console.print(Panel(table, title="[bold]Select Server[/]", border_style="blue", padding=(1, 2)))
+        console.print("[dim]0[/] Cancel")
 
         s_choice = input("Select a server by index: ").strip()
         if s_choice == "0":
@@ -543,45 +639,50 @@ def run_main_choice(client: BinaryLaneClient, choice: str):
         try:
             idx = int(s_choice)
             if not (1 <= idx <= len(servers)):
-                print("Error: Invalid index.")
+                console.print("[red]Error:[/] Invalid index.")
                 prompt_choice()
                 return
             server_id = servers[idx - 1]["id"]
         except ValueError:
-            print("Error: Please enter a number.")
+            console.print("[red]Error:[/] Please enter a number.")
             prompt_choice()
             return
 
         clear_screen()
-        print("=" * 50)
-        print(f"Perform Action on Server (ID: {server_id})")
-        print("=" * 50)
-        action_type = input(
-            "Enter action type (e.g., reboot, power_on, power_off): "
-        ).strip()
+        action_type = input("Enter action type (e.g., reboot, power_on, power_off): ").strip()
         if not action_type:
-            print("Error: Action type required.")
+            console.print("[red]Error:[/] Action type required.")
             prompt_choice()
             return
         try:
-            data = client.perform_server_action(server_id, action_type)
-            print_json(data)
+            result = client.perform_server_action(server_id, action_type)
+            action = result.get("action", result)
+            items = [
+                ("Action ID:", str(action.get("id", ""))),
+                ("Type:", action.get("type", "")),
+                ("Status:", action.get("status", "")),
+                ("Started:", str(action.get("started_at", ""))),
+                ("Completed:", str(action.get("completed_at", ""))),
+                ("Region:", action.get("region_slug", "")),
+            ]
+            t = make_info_table(items)
+            console.print(Panel(t, title="[bold]Action Result[/]", border_style="green", padding=(1, 2)))
         except BinaryLaneValidationError as e:
-            print(f"Validation error: {e}")
+            console.print(f"[red]Validation error:[/] {e}")
             if e.response_data:
-                print(e.response_data)
+                console.print(e.response_data)
         except BinaryLaneAPIError as e:
-            print(f"Error: {e}")
+            console.print(f"[red]Error:[/] {e}")
         prompt_choice()
 
     elif choice.lower() == "q":
         clear_screen()
-        print("Goodbye!")
+        console.print("[bold green]Goodbye![/]")
         sys.exit(0)
 
     else:
         clear_screen()
-        print("Invalid option. Press Enter to continue...")
+        console.print("[red]Invalid option. Press Enter to continue...[/]")
         input()
 
 
