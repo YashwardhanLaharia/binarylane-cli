@@ -131,8 +131,10 @@ def run_speedtest(client: BinaryLaneClient):
 
             try:
                 samples = client.get_latest_sample_set(sid)
-                net_in = samples.get("network_incoming_kbps", 0)
-                net_out = samples.get("network_outgoing_kbps", 0)
+                ss = samples.get("sample_set", {})
+                avg = ss.get("average", {})
+                net_in = avg.get("network_incoming_kbps", 0)
+                net_out = avg.get("network_outgoing_kbps", 0)
                 vps_in = format_kbps(net_in)
                 vps_out = format_kbps(net_out)
             except BinaryLaneAPIError:
