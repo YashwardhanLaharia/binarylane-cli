@@ -56,8 +56,9 @@ class BinaryLaneClient:
             path = "/" + path
         url = f"{self.base_url}{path}"
 
+        timeout = kwargs.pop("timeout", 30)
         try:
-            response = self.session.request(method, url, timeout=30, **kwargs)
+            response = self.session.request(method, url, timeout=timeout, **kwargs)
         except requests.exceptions.ConnectionError as e:
             raise BinaryLaneConnectionError(
                 f"Could not connect to BinaryLane API: {e}",
