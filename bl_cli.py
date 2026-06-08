@@ -155,7 +155,7 @@ def show_main_menu():
     table.add_row("Q.", "Quit")
     panel = Panel(
         table,
-        title="[bold yellow]BinaryLane API Explorer[/]",
+        title="[bold yellow]BinaryLane API CLI[/]",
         border_style="blue",
         padding=(1, 2),
     )
