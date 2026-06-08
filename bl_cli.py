@@ -4,6 +4,10 @@ import json
 
 import requests
 from dotenv import load_dotenv
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich import box
 
 # --- Custom Exceptions ---
 
@@ -140,15 +144,22 @@ def print_json(data: dict):
 
 def show_main_menu():
     clear_screen()
-    print("=" * 50)
-    print("BinaryLane API Explorer")
-    print("=" * 50)
-    print("1. Account Info")
-    print("2. Servers")
-    print("3. List Recent Actions")
-    print("4. Perform Server Action")
-    print("Q. Quit")
-    print("=" * 50)
+    console = Console()
+    table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+    table.add_column(style="cyan", justify="right", width=2)
+    table.add_column("")
+    table.add_row("1.", "Account Info")
+    table.add_row("2.", "Servers")
+    table.add_row("3.", "List Recent Actions")
+    table.add_row("4.", "Perform Server Action")
+    table.add_row("Q.", "Quit")
+    panel = Panel(
+        table,
+        title="[bold yellow]BinaryLane API Explorer[/]",
+        border_style="blue",
+        padding=(1, 2),
+    )
+    console.print(panel)
 
 
 def show_servers_menu(client: BinaryLaneClient):
