@@ -5,62 +5,149 @@ import json
 import requests
 from dotenv import load_dotenv
 
-BASE_URL = "https://api.binarylane.com.au"
+# --- Custom Exceptions ---
+
+
+class BinaryLaneAPIError(Exception):
+    """Base exception for BinaryLane API errors."""
+
+    def __init__(self, message, status_code=None, response_data=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_data = response_data
+
+
+class BinaryLaneAuthError(BinaryLaneAPIError):
+    """Raised on 401 Unauthorized."""
+
+    pass
+
+
+class BinaryLaneNotFound(BinaryLaneAPIError):
+    """Raised on 404 Not Found."""
+
+    pass
+
+
+class BinaryLaneValidationError(BinaryLaneAPIError):
+    """Raised on 400 Bad Request or validation errors."""
+
+    pass
+
+
+# --- Client ---
+
+
+class BinaryLaneClient:
+    def __init__(self, api_token: str, base_url: str = "https://api.binarylane.com.au"):
+        self.base_url = base_url.rstrip("/")
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "Authorization": f"Bearer {api_token}",
+                "Content-Type": "application/json",
+            }
+        )
+
+    def _request(self, method: str, path: str, **kwargs) -> dict:
+        if not path.startswith("/"):
+            path = "/" + path
+        url = f"{self.base_url}{path}"
+
+        response = self.session.request(method, url, **kwargs)
+
+        if response.status_code == 401:
+            raise BinaryLaneAuthError(
+                "Authentication failed. Check your API token.",
+                status_code=401,
+                response_data=response.text,
+            )
+        elif response.status_code == 404:
+            raise BinaryLaneNotFound(
+                f"Resource not found: {path}",
+                status_code=404,
+                response_data=response.text,
+            )
+        elif response.status_code == 400:
+            raise BinaryLaneValidationError(
+                "Validation error. Check your request.",
+                status_code=400,
+                response_data=response.text,
+            )
+
+        response.raise_for_status()
+
+        if response.status_code == 204:
+            return {}
+        return response.json()
+
+    # Account
+    def get_account(self) -> dict:
+        return self._request("GET", "/v2/account")
+
+    # Servers
+    def list_servers(self, page: int = 1, per_page: int = 20) -> dict:
+        params = {"page": page, "per_page": per_page}
+        return self._request("GET", "/v2/servers", params=params)
+
+    def get_server(self, server_id: int) -> dict:
+        return self._request("GET", f"/v2/servers/{server_id}")
+
+    # Actions
+    def list_actions(self, page: int = 1, per_page: int = 20) -> dict:
+        params = {"page": page, "per_page": per_page}
+        return self._request("GET", "/v2/actions", params=params)
+
+    def perform_server_action(self, server_id: int, action_type: str, **kwargs) -> dict:
+        payload = {"type": action_type, **kwargs}
+        return self._request("POST", f"/v2/servers/{server_id}/actions", json=payload)
+
+    # Helpers
+    def get_server_list(self) -> list:
+        """Convenience: returns just the list of server dicts."""
+        data = self.list_servers()
+        return data.get("servers", [])
+
+
+# --- UI Helpers ---
 
 
 def clear_screen():
     os.system("cls" if os.name == "nt" else "clear")
 
 
-def get_headers():
-    token = os.environ.get("API_TOKEN")
-    if not token:
-        print("Error: API_TOKEN not found in environment.")
-        sys.exit(1)
-    return {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
+def prompt_choice():
+    return input("\nPress Enter to return to menu...")
 
 
-def get_account_info():
-    url = f"{BASE_URL}/v2/account"
-    response = requests.get(url, headers=get_headers())
-    response.raise_for_status()
-    return response.json()
+def print_json(data: dict):
+    print(json.dumps(data, indent=2))
 
 
-def list_servers(page=1, per_page=20):
-    url = f"{BASE_URL}/v2/servers"
-    params = {"page": page, "per_page": per_page}
-    response = requests.get(url, headers=get_headers(), params=params)
-    response.raise_for_status()
-    return response.json()
+# --- Menus ---
 
 
-def get_server(server_id: int):
-    url = f"{BASE_URL}/v2/servers/{server_id}"
-    response = requests.get(url, headers=get_headers())
-    response.raise_for_status()
-    return response.json()
+def show_main_menu():
+    clear_screen()
+    print("=" * 50)
+    print("BinaryLane API Explorer")
+    print("=" * 50)
+    print("1. Account Info")
+    print("2. List Servers")
+    print("3. Server Details")
+    print("4. List Recent Actions")
+    print("5. Perform Server Action")
+    print("Q. Quit")
+    print("=" * 50)
 
 
-def list_actions(page=1, per_page=20):
-    url = f"{BASE_URL}/v2/actions"
-    params = {"page": page, "per_page": per_page}
-    response = requests.get(url, headers=get_headers(), params=params)
-    response.raise_for_status()
-    return response.json()
-
-
-def select_server():
+def select_server(client: BinaryLaneClient) -> int:
     clear_screen()
     print("=" * 50)
     print("Select a Server")
     print("=" * 50)
     try:
-        data = list_servers()
-        servers = data.get("servers", [])
+        servers = client.get_server_list()
         if not servers:
             print("No servers found.")
             return None
@@ -76,46 +163,23 @@ def select_server():
                 print("Error: Invalid index.")
         except ValueError:
             print("Error: Please enter a number.")
-    except requests.exceptions.HTTPError as e:
-        print(f"Error fetching servers: {e}")
+    except BinaryLaneAPIError as e:
+        print(f"Error: {e}")
     return None
 
 
-def perform_server_action(server_id: int, action_type: str, **kwargs):
-    url = f"{BASE_URL}/v2/servers/{server_id}/actions"
-    payload = {"type": action_type, **kwargs}
-    response = requests.post(url, headers=get_headers(), json=payload)
-    response.raise_for_status()
-    return response.json()
+def show_server_details_menu(client: BinaryLaneClient, server_id: int):
+    try:
+        data = client.get_server(server_id)
+    except BinaryLaneAPIError as e:
+        print(f"Error fetching server details: {e}")
+        prompt_choice()
+        return
 
-
-def prompt_action_type():
-    return input("Enter action type (e.g., reboot, power_on, power_off): ").strip()
-
-
-def prompt_choice():
-    return input("\nPress Enter to return to menu...")
-
-
-def show_menu():
-    clear_screen()
-    print("=" * 50)
-    print("BinaryLane API Explorer")
-    print("=" * 50)
-    print("1. Account Info")
-    print("2. List Servers")
-    print("3. Server Details")
-    print("4. List Recent Actions")
-    print("5. Perform Server Action")
-    print("Q. Quit")
-    print("=" * 50)
-
-
-def show_server_details_menu(server_data):
-    server = server_data.get("server", {})
+    server = data.get("server", {})
     if not server:
         print("No server data returned.")
-        input("\nPress Enter to continue...")
+        prompt_choice()
         return
 
     while True:
@@ -158,7 +222,7 @@ def show_server_details_menu(server_data):
             print(f"vCPUs: {server.get('vcpus')}")
             print(f"Disk: {server.get('disk')} GB")
             print(f"Size Slug: {server.get('size_slug')}")
-            size_type = size.get('size_type') or {}
+            size_type = size.get("size_type") or {}
             print(f"Plan Type: {size_type.get('name')}")
             print(f"Price Monthly: ${size.get('price_monthly')}")
             print(f"Price Hourly: ${size.get('price_hourly')}")
@@ -217,7 +281,7 @@ def show_server_details_menu(server_data):
             print("=" * 50)
             print(f"Backup IDs: {server.get('backup_ids')}")
             print(f"Next Backup Window: {server.get('next_backup_window')}")
-            backup_settings = server.get('backup_settings') or {}
+            backup_settings = server.get("backup_settings") or {}
             print("Backup Settings:")
             for key, value in backup_settings.items():
                 print(f"  - {key}: {value}")
@@ -230,7 +294,7 @@ def show_server_details_menu(server_data):
             print("=" * 50)
             print("Full JSON")
             print("=" * 50)
-            print(json.dumps(server_data, indent=2))
+            print_json(data)
             input("\nPress Enter to continue...")
 
         elif choice == "7":
@@ -241,16 +305,16 @@ def show_server_details_menu(server_data):
             input()
 
 
-def run_choice(choice):
+def run_main_choice(client: BinaryLaneClient, choice: str):
     if choice == "1":
         clear_screen()
         print("=" * 50)
         print("Account Info")
         print("=" * 50)
         try:
-            data = get_account_info()
-            print(json.dumps(data, indent=2))
-        except requests.exceptions.HTTPError as e:
+            data = client.get_account()
+            print_json(data)
+        except BinaryLaneAPIError as e:
             print(f"Error: {e}")
         prompt_choice()
 
@@ -260,24 +324,18 @@ def run_choice(choice):
         print("List Servers")
         print("=" * 50)
         try:
-            data = list_servers()
-            print(json.dumps(data, indent=2))
-        except requests.exceptions.HTTPError as e:
+            data = client.list_servers()
+            print_json(data)
+        except BinaryLaneAPIError as e:
             print(f"Error: {e}")
         prompt_choice()
 
     elif choice == "3":
-        server_id = select_server()
+        server_id = select_server(client)
         if server_id is None:
             prompt_choice()
             return
-        try:
-            data = get_server(server_id)
-        except requests.exceptions.HTTPError as e:
-            print(f"Error fetching server details: {e}")
-            prompt_choice()
-            return
-        show_server_details_menu(data)
+        show_server_details_menu(client, server_id)
 
     elif choice == "4":
         clear_screen()
@@ -285,9 +343,9 @@ def run_choice(choice):
         print("List Recent Actions")
         print("=" * 50)
         try:
-            data = list_actions()
-            print(json.dumps(data, indent=2))
-        except requests.exceptions.HTTPError as e:
+            data = client.list_actions()
+            print_json(data)
+        except BinaryLaneAPIError as e:
             print(f"Error: {e}")
         prompt_choice()
 
@@ -296,7 +354,7 @@ def run_choice(choice):
         print("=" * 50)
         print("Perform Server Action")
         print("=" * 50)
-        server_id = select_server()
+        server_id = select_server(client)
         if server_id is None:
             prompt_choice()
             return
@@ -304,16 +362,20 @@ def run_choice(choice):
         print("=" * 50)
         print(f"Perform Action on Server (ID: {server_id})")
         print("=" * 50)
-        action_type = prompt_action_type()
+        action_type = input("Enter action type (e.g., reboot, power_on, power_off): ").strip()
         if not action_type:
             print("Error: Action type required.")
             prompt_choice()
             return
         try:
-            data = perform_server_action(server_id, action_type)
-            print(json.dumps(data, indent=2))
-        except requests.exceptions.HTTPError as e:
-            print(f"Error performing action: {e}")
+            data = client.perform_server_action(server_id, action_type)
+            print_json(data)
+        except BinaryLaneValidationError as e:
+            print(f"Validation error: {e}")
+            if e.response_data:
+                print(e.response_data)
+        except BinaryLaneAPIError as e:
+            print(f"Error: {e}")
         prompt_choice()
 
     elif choice.lower() == "q":
@@ -329,10 +391,18 @@ def run_choice(choice):
 
 def main():
     load_dotenv()
+
+    token = os.environ.get("API_TOKEN")
+    if not token:
+        print("Error: API_TOKEN not found in environment.")
+        sys.exit(1)
+
+    client = BinaryLaneClient(token)
+
     while True:
-        show_menu()
+        show_main_menu()
         choice = input("Select an option: ").strip()
-        run_choice(choice)
+        run_main_choice(client, choice)
 
 
 if __name__ == "__main__":
