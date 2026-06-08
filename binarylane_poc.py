@@ -53,21 +53,40 @@ def list_actions(page=1, per_page=20):
     return response.json()
 
 
+def select_server():
+    clear_screen()
+    print("=" * 50)
+    print("Select a Server")
+    print("=" * 50)
+    try:
+        data = list_servers()
+        servers = data.get("servers", [])
+        if not servers:
+            print("No servers found.")
+            return None
+        for i, server in enumerate(servers, 1):
+            print(f"{i}) {server['name']} (ID: {server['id']})")
+        print("=" * 50)
+        choice = input("Select a server by index: ").strip()
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(servers):
+                return servers[idx - 1]["id"]
+            else:
+                print("Error: Invalid index.")
+        except ValueError:
+            print("Error: Please enter a number.")
+    except requests.exceptions.HTTPError as e:
+        print(f"Error fetching servers: {e}")
+    return None
+
+
 def perform_server_action(server_id: int, action_type: str, **kwargs):
     url = f"{BASE_URL}/v2/servers/{server_id}/actions"
     payload = {"type": action_type, **kwargs}
     response = requests.post(url, headers=get_headers(), json=payload)
     response.raise_for_status()
     return response.json()
-
-
-def prompt_server_id():
-    sid = input("Enter Server ID: ").strip()
-    try:
-        return int(sid)
-    except ValueError:
-        print("Error: Server ID must be an integer.")
-        return None
 
 
 def prompt_action_type():
@@ -122,8 +141,12 @@ def run_choice(choice):
         print("=" * 50)
         print("Server Details")
         print("=" * 50)
-        server_id = prompt_server_id()
+        server_id = select_server()
         if server_id is not None:
+            clear_screen()
+            print("=" * 50)
+            print(f"Server Details (ID: {server_id})")
+            print("=" * 50)
             try:
                 data = get_server(server_id)
                 print(json.dumps(data, indent=2))
@@ -148,8 +171,12 @@ def run_choice(choice):
         print("=" * 50)
         print("Perform Server Action")
         print("=" * 50)
-        server_id = prompt_server_id()
+        server_id = select_server()
         if server_id is not None:
+            clear_screen()
+            print("=" * 50)
+            print(f"Perform Action on Server (ID: {server_id})")
+            print("=" * 50)
             action_type = prompt_action_type()
             if action_type:
                 try:
