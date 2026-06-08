@@ -695,10 +695,15 @@ def main():
 
     client = BinaryLaneClient(token)
 
-    while True:
-        show_main_menu()
-        choice = input("Select an option: ").strip()
-        run_main_choice(client, choice)
+    try:
+        while True:
+            show_main_menu()
+            choice = input("Select an option: ").strip()
+            run_main_choice(client, choice)
+    except KeyboardInterrupt:
+        clear_screen()
+        console.print("[bold green]Goodbye![/]")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
