@@ -1,5 +1,7 @@
 import re
 import subprocess
+import platform
+from typing import Optional
 
 from rich.panel import Panel
 from rich.table import Table
