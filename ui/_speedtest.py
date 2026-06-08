@@ -61,7 +61,7 @@ def _latency_verdict(avg: float) -> str:
     return "[red]Bad[/]"
 
 
-def _get_public_ipv4(server: dict) -> str | None:
+def _get_public_ipv4(server: dict) -> Optional[str]:
     networks = server.get("networks", {})
     for entry in networks.get("v4", []):
         if entry.get("type") == "public" and entry.get("ip_address"):
