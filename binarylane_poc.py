@@ -113,7 +113,9 @@ class BinaryLaneClient:
         return self._request("GET", f"/v2/data_usages/{server_id}/current")
 
     # Performance / Sample Sets
-    def get_latest_sample_set(self, server_id: int, data_interval: str = "five-minute") -> dict:
+    def get_latest_sample_set(
+        self, server_id: int, data_interval: str = "five-minute"
+    ) -> dict:
         params = {"data_interval": data_interval}
         return self._request("GET", f"/v2/samplesets/{server_id}/latest", params=params)
 
@@ -177,7 +179,9 @@ def show_servers_menu(client: BinaryLaneClient):
         os_name = image.get("distribution", "?")
         os_version = image.get("name", "")
         os_full = f"{os_name} {os_version}".strip()
-        print(f"{i}) {name:30s} (ID: {sid:<8d}) [{status:8s}] {region_name:<8s} {os_full}")
+        print(
+            f"{i}) {name:30s} (ID: {sid:<8d}) [{status:8s}] {region_name:<8s} {os_full}"
+        )
 
     print("=" * 50)
     print("0) Back to Main Menu")
@@ -242,7 +246,9 @@ def show_server_details_menu(client: BinaryLaneClient, server_id: int):
             print(f"Status: {server.get('status')}")
             print(f"Created At: {server.get('created_at')}")
             print(f"Permalink: {server.get('permalink')}")
-            print(f"Password Change Supported: {server.get('password_change_supported')}")
+            print(
+                f"Password Change Supported: {server.get('password_change_supported')}"
+            )
             input("\nPress Enter to continue...")
 
         elif choice == "2":
@@ -408,7 +414,9 @@ def show_performance_menu(client: BinaryLaneClient, server_id: int):
             print("Current Performance")
             print("=" * 50)
             try:
-                data = client.get_latest_sample_set(server_id, data_interval="five-minute")
+                data = client.get_latest_sample_set(
+                    server_id, data_interval="five-minute"
+                )
                 ss = data.get("sample_set")
                 if not ss:
                     print("No performance sample data available.")
@@ -429,18 +437,30 @@ def show_performance_menu(client: BinaryLaneClient, server_id: int):
                     read_iops = avg.get("storage_read_requests_per_second", 0)
                     write_iops = avg.get("storage_write_requests_per_second", 0)
 
-                    print(f"Period: {period.get('start', '?')} to {period.get('end', '?')}")
+                    print(
+                        f"Period: {period.get('start', '?')} to {period.get('end', '?')}"
+                    )
                     print(f"Data Interval: {period.get('data_interval', '?')}")
                     print()
                     print(f"CPU Usage: {cpu:.1f}%")
                     if cpu_detailed:
-                        cores = ", ".join([f"v{i+1}: {c:.1f}%" for i, c in enumerate(cpu_detailed)])
+                        cores = ", ".join(
+                            [f"v{i+1}: {c:.1f}%" for i, c in enumerate(cpu_detailed)]
+                        )
                         print(f"  Per-core: {cores}")
-                    print(f"Memory: {format_bytes_to_mb(mem_bytes)} avg | {max_mem_mb:.2f} MB peak")
-                    print(f"Network: {format_kbps(net_in)} in | {format_kbps(net_out)} out")
+                    print(
+                        f"Memory: {format_bytes_to_mb(mem_bytes)} avg | {max_mem_mb:.2f} MB peak"
+                    )
+                    print(
+                        f"Network: {format_kbps(net_in)} in | {format_kbps(net_out)} out"
+                    )
                     print(f"Storage: {storage_used_mb:.2f} MB used")
-                    print(f"  Read:  {format_kbps(storage_read_kbps)} | {read_iops:.1f} IOPS")
-                    print(f"  Write: {format_kbps(storage_write_kbps)} | {write_iops:.1f} IOPS")
+                    print(
+                        f"  Read:  {format_kbps(storage_read_kbps)} | {read_iops:.1f} IOPS"
+                    )
+                    print(
+                        f"  Write: {format_kbps(storage_write_kbps)} | {write_iops:.1f} IOPS"
+                    )
                     print(f"Peak Storage: {max_storage_gb:.2f} GB")
             except BinaryLaneAPIError as e:
                 print(f"Error: {e}")
@@ -525,7 +545,9 @@ def run_main_choice(client: BinaryLaneClient, choice: str):
         print("=" * 50)
         print(f"Perform Action on Server (ID: {server_id})")
         print("=" * 50)
-        action_type = input("Enter action type (e.g., reboot, power_on, power_off): ").strip()
+        action_type = input(
+            "Enter action type (e.g., reboot, power_on, power_off): "
+        ).strip()
         if not action_type:
             print("Error: Action type required.")
             prompt_choice()
