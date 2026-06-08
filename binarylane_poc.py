@@ -133,39 +133,63 @@ def show_main_menu():
     print("BinaryLane API Explorer")
     print("=" * 50)
     print("1. Account Info")
-    print("2. List Servers")
-    print("3. Server Details")
-    print("4. List Recent Actions")
-    print("5. Perform Server Action")
+    print("2. Servers")
+    print("3. List Recent Actions")
+    print("4. Perform Server Action")
     print("Q. Quit")
     print("=" * 50)
 
 
-def select_server(client: BinaryLaneClient) -> int:
+def show_servers_menu(client: BinaryLaneClient):
     clear_screen()
     print("=" * 50)
-    print("Select a Server")
+    print("Your Servers")
     print("=" * 50)
+
     try:
         servers = client.get_server_list()
-        if not servers:
-            print("No servers found.")
-            return None
-        for i, server in enumerate(servers, 1):
-            print(f"{i}) {server['name']} (ID: {server['id']})")
-        print("=" * 50)
-        choice = input("Select a server by index: ").strip()
-        try:
-            idx = int(choice)
-            if 1 <= idx <= len(servers):
-                return servers[idx - 1]["id"]
-            else:
-                print("Error: Invalid index.")
-        except ValueError:
-            print("Error: Please enter a number.")
     except BinaryLaneAPIError as e:
         print(f"Error: {e}")
-    return None
+        prompt_choice()
+        return
+
+    if not servers:
+        print("No servers found.")
+        prompt_choice()
+        return
+
+    for i, server in enumerate(servers, 1):
+        region = server.get("region", {})
+        image = server.get("image", {})
+        name = server.get("name", "Unknown")
+        sid = server.get("id", "?")
+        status = server.get("status", "unknown")
+        region_name = region.get("slug", "?")
+        os_name = image.get("distribution", "?")
+        os_version = image.get("name", "")
+        os_full = f"{os_name} {os_version}".strip()
+        print(f"{i}) {name:30s} (ID: {sid:<8d}) [{status:8s}] {region_name:<8s} {os_full}")
+
+    print("=" * 50)
+    print("0) Back to Main Menu")
+    print("=" * 50)
+
+    choice = input("Select a server by index: ").strip()
+
+    if choice == "0":
+        return
+
+    try:
+        idx = int(choice)
+        if 1 <= idx <= len(servers):
+            server_id = servers[idx - 1]["id"]
+            show_server_details_menu(client, server_id)
+        else:
+            print("Error: Invalid index.")
+            prompt_choice()
+    except ValueError:
+        print("Error: Please enter a number.")
+        prompt_choice()
 
 
 def show_server_details_menu(client: BinaryLaneClient, server_id: int):
@@ -319,25 +343,9 @@ def run_main_choice(client: BinaryLaneClient, choice: str):
         prompt_choice()
 
     elif choice == "2":
-        clear_screen()
-        print("=" * 50)
-        print("List Servers")
-        print("=" * 50)
-        try:
-            data = client.list_servers()
-            print_json(data)
-        except BinaryLaneAPIError as e:
-            print(f"Error: {e}")
-        prompt_choice()
+        show_servers_menu(client)
 
     elif choice == "3":
-        server_id = select_server(client)
-        if server_id is None:
-            prompt_choice()
-            return
-        show_server_details_menu(client, server_id)
-
-    elif choice == "4":
         clear_screen()
         print("=" * 50)
         print("List Recent Actions")
@@ -349,15 +357,45 @@ def run_main_choice(client: BinaryLaneClient, choice: str):
             print(f"Error: {e}")
         prompt_choice()
 
-    elif choice == "5":
+    elif choice == "4":
         clear_screen()
         print("=" * 50)
         print("Perform Server Action")
         print("=" * 50)
-        server_id = select_server(client)
-        if server_id is None:
+
+        # Reuse the server picker
+        try:
+            servers = client.get_server_list()
+        except BinaryLaneAPIError as e:
+            print(f"Error: {e}")
             prompt_choice()
             return
+
+        if not servers:
+            print("No servers found.")
+            prompt_choice()
+            return
+
+        for i, server in enumerate(servers, 1):
+            print(f"{i}) {server['name']} (ID: {server['id']})")
+        print("0) Cancel")
+
+        s_choice = input("Select a server by index: ").strip()
+        if s_choice == "0":
+            return
+
+        try:
+            idx = int(s_choice)
+            if not (1 <= idx <= len(servers)):
+                print("Error: Invalid index.")
+                prompt_choice()
+                return
+            server_id = servers[idx - 1]["id"]
+        except ValueError:
+            print("Error: Please enter a number.")
+            prompt_choice()
+            return
+
         clear_screen()
         print("=" * 50)
         print(f"Perform Action on Server (ID: {server_id})")
